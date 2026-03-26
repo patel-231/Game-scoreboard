@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Badminton Pro: All-Time Data</title>
+    <style>
+        :root { --bg: #0f172a; --card: #ffffff; --accent: #10b981; --p1: #2563eb; --p2: #dc2626; --gold: #fbbf24; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; display: flex; justify-content: center; padding: 10px; margin: 0; }
+        .container { background: var(--card); width: 100%; max-width: 450px; border-radius: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.15); overflow: hidden; position: relative; }
+        
+        /* Persistent Header */
+        .setup-section { background: var(--bg); color: white; padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 2px solid var(--gold); }
+        .setup-section input { background: #334155; border: 1px solid #475569; color: white; padding: 6px; border-radius: 6px; margin-top: 4px; }
+
+        .team-header { background: #1e293b; padding: 15px; display: flex; align-items: center; justify-content: space-between; color: white; }
+        .team-header input { width: 38%; background: transparent; border: none; border-bottom: 2px solid #475569; color: white; text-align: center; font-weight: bold; }
+        .vs-btn { background: var(--gold); color: var(--bg); width: 32px; height: 32px; border-radius: 50%; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; }
+
+        /* Scoring Sides */
+        .court { display: grid; grid-template-columns: 1fr 1fr; height: 260px; position: relative; }
+        .side { display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: 0.15s; }
+        .side:active { background: #e2e8f0; }
+        .side.s1 { background: #eff6ff; border-right: 1px solid #cbd5e1; }
+        .side.s2 { background: #fff1f2; }
+        .pts { font-size: 7.5rem; margin: 0; font-weight: 900; line-height: 1; }
+        
+        .serving-tag { position: absolute; top: 10px; font-weight: 800; font-size: 0.65rem; color: #059669; letter-spacing: 1px; visibility: hidden; }
+        .active-serve .serving-tag { visibility: visible; }
+
+        /* Controls */
+        .controls { padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 14px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        .btn-blue { background: var(--p1); color: white; }
+        .btn-red { background: var(--p2); color: white; }
+        .btn-util { background: #64748b; color: white; grid-column: span 2; }
+
+        /* All-Time Data Log */
+        .history-box { background: #f8fafc; padding: 15px; border-top: 1px solid #e2e8f0; }
+        .history-box h3 { font-size: 0.8rem; color: #64748b; text-transform: uppercase; margin-top: 0; }
+        .log-container { max-height: 200px; overflow-y: auto; }
+        .log-item { background: white; padding: 10px; border-radius: 8px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); }
+        .log-item div { font-size: 0.8rem; font-weight: bold; }
+        .log-item span { font-size: 0.7rem; color: #94a3b8; }
+    </style>
+</head>
+<body onload="loadAllData()">
+
+<div class="container">
+    <div class="setup-section">
+        <div><label style="font-size: 0.7rem;">GOAL (PTS)</label><input type="number" id="goal" value="10" onchange="saveCurrent()"></div>
+        <div><label style="font-size: 0.7rem;">MERCY (0-7)</label><input type="number" id="mercy" value="7" onchange="saveCurrent()"></div>
+    </div>
+
+    <div class="team-header">
+        <input type="text" id="t1" value="PLAYER 1" onchange="saveCurrent()">
+        <button class="vs-btn" onclick="swap()">VS</button>
+        <input type="text" id="t2" value="PLAYER 2" onchange="saveCurrent()">
+    </div>
+
+    <div class="court">
+        <div class="side s1" id="box1" onclick="addPoint(1)">
+            <span class="serving-tag">🏸 SERVING</span>
+            <h1 class="pts" id="p1" style="color: var(--p1)">0</h1>
+            <div style="font-weight:bold; color:#64748b">SETS: <span id="set1">0</span></div>
+        </div>
+        <div class="side s2" id="box2" onclick="addPoint(2)">
+            <span class="serving-tag">🏸 SERVING</span>
+            <h1 class="pts" id="p2" style="color: var(--p2)">0</h1>
+            <div style="font-weight:bold; color:#64748b">SETS: <span id="set2">0</span></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-blue" onclick="addPoint(1)">Point P1</button>
+        <button class="btn-red" onclick="addPoint(2)">Point P2</button>
+        <button class="btn-util" onclick="undo()">Undo Last Point</button>
+        <button class="btn-util" style="background:#ef4444; margin-top: 10px;" onclick="clearAllData()">Clear All Data Forever</button>
+    </div>
+
+    <div class="history-box">
+        <h3>All-Time Match History</h3>
+        <div id="all-time-log" class="log-container">
+            </div>
+    </div>
+</div>
+
+<script>
+    // State management
+    let state = {
+        p1: 0, p2: 0, s1: 0, s2: 0,
+        serving: 1, 
+        history: [], // For Undos
+        matchHistory: [] // All-time records
+    };
+
+    function saveCurrent() {
+        state.t1 = document.getElementById('t1').value;
+        state.t2 = document.getElementById('t2').value;
+        state.goal = parseInt(document.getElementById('goal').value);
+        state.mercy = parseInt(document.getElementById('mercy').value);
+        localStorage.setItem('badminton_alltime_v1', JSON.stringify(state));
+    }
+
+    function loadAllData() {
+        const data = localStorage.getItem('badminton_alltime_v1');
+        if (data) {
+            state = JSON.parse(data);
+            document.getElementById('t1').value = state.t1 || "PLAYER 1";
+            document.getElementById('t2').value = state.t2 || "PLAYER 2";
+            document.getElementById('goal').value = state.goal || 10;
+            document.getElementById('mercy').value = state.mercy || 7;
+            renderAllHistory();
+            refreshUI();
+        }
+    }
+
+    function addPoint(player) {
+        state.serving = player;
+        if (player === 1) state.p1++; else state.p2++;
+        
+        state.history.push({p1: state.p1, p2: state.p2, s1: state.s1, s2: state.s2, serving: player});
+        
+        checkWin();
+        refreshUI();
+        saveCurrent();
+    }
+
+    function checkWin() {
+        // Mercy Logic
+        if (state.p1 >= state.mercy && state.p2 === 0) finishMatch(state.t1, `Mercy (${state.p1}-0)`);
+        else if (state.p2 >= state.mercy && state.p1 === 0) finishMatch(state.t2, `Mercy (${state.p2}-0)`);
+        
+        // Goal Logic
+        else if (state.p1 >= state.goal) finishSet(1);
+        else if (state.p2 >= state.goal) finishSet(2);
+    }
+
+    function finishSet(winnerNum) {
+        if (winnerNum === 1) state.s1++; else state.s2++;
+        alert(`Set Over! Winner: ${winnerNum === 1 ? state.t1 : state.t2}`);
+        
+        // Auto-log to history if match seems done
+        const entry = {
+            date: new Date().toLocaleDateString(),
+            players: `${state.t1} vs ${state.t2}`,
+            score: `${state.p1} - ${state.p2}`
+        };
+        state.matchHistory.push(entry);
+        renderAllHistory();
+
+        state.p1 = 0; state.p2 = 0;
+    }
+
+    function finishMatch(winner, reason) {
+        alert(`MATCH OVER! Winner: ${winner} (${reason})`);
+        state.p1 = 0; state.p2 = 0;
+    }
+
+    function refreshUI() {
+        document.getElementById('p1').innerText = state.p1;
+        document.getElementById('p2').innerText = state.p2;
+        document.getElementById('set1').innerText = state.s1;
+        document.getElementById('set2').innerText = state.s2;
+
+        document.getElementById('box1').className = 'side s1' + (state.serving === 1 ? ' active-serve' : '');
+        document.getElementById('box2').className = 'side s2' + (state.serving === 2 ? ' active-serve' : '');
+    }
+
+    function renderAllHistory() {
+        const container = document.getElementById('all-time-log');
+        container.innerHTML = '';
+        state.matchHistory.slice().reverse().forEach(match => {
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = `<div>${match.players}</div> <div>${match.score} <br> <span>${match.date}</span></div>`;
+            container.appendChild(div);
+        });
+    }
+
+    function swap() {
+        const t1 = document.getElementById('t1'), t2 = document.getElementById('t2');
+        [t1.value, t2.value] = [t2.value, t1.value];
+        saveCurrent();
+    }
+
+    function undo() {
+        if (state.history.length > 0) {
+            state.history.pop();
+            if (state.history.length > 0) {
+                const last = state.history[state.history.length - 1];
+                state.p1 = last.p1; state.p2 = last.p2;
+                state.s1 = last.s1; state.s2 = last.s2; state.serving = last.serving;
+            } else {
+                state.p1 = 0; state.p2 = 0;
+            }
+            refreshUI();
+            saveCurrent();
+        }
+    }
+
+    function clearAllData() {
+        if(confirm("This will delete ALL match history and current scores forever. Continue?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+</script>
+</body>
+</html>
